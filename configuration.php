@@ -35,16 +35,26 @@ $section->add(
     [
         'icon'          => 'th-list',
         'description'   => $this->translate('Open Incidents'),
-        'url'           => 'notifications/incidents?incident.severity!=ok',
+        'url'           => 'notifications/incidents?incident.recovered_at=',
         'priority'      => 10
     ]
 );
 
 $section->add(
-    N_('History'),
+    N_('Incident History'),
+    [
+        'icon'          => 'history',
+        'description'   => $this->translate('Closed incidents'),
+        'url'           => 'notifications/incidents?incident.recovered_at!=',
+        'priority'      => 15
+    ]
+);
+
+$section->add(
+    N_('Notification History'),
     [
         'icon'          => 'paper-plane',
-        'description'   => $this->translate('History'),
+        'description'   => $this->translate('Notification delivery history'),
         'url'           => 'notifications/history',
         'priority'      => 20
     ]
