@@ -35,7 +35,7 @@ $section->add(
     [
         'icon'          => 'th-list',
         'description'   => $this->translate('Open Incidents'),
-        'url'           => 'notifications/incidents?incident.recovered_at=',
+        'url'           => 'notifications/incidents?incident.recovered_at!~%2A',
         'priority'      => 10
     ]
 );
@@ -45,7 +45,7 @@ $section->add(
     [
         'icon'          => 'history',
         'description'   => $this->translate('Closed incidents'),
-        'url'           => 'notifications/incidents?incident.recovered_at!=',
+        'url'           => 'notifications/incidents?incident.recovered_at~%2A',
         'priority'      => 15
     ]
 );
