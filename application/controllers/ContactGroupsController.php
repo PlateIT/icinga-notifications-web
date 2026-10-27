@@ -123,7 +123,10 @@ class ContactGroupsController extends CompatController
                         'No contact groups found. Do not forget to also'
                         . ' {{#link}}create your first contact!{{/link}}'
                     ),
-                    ['link' => (new ActionLink(null, Links::contactAdd()))->setBaseTarget('_next')]
+                    ['link' => (new ActionLink(
+                        null,
+                        Links::contactAdd()->with(['showCompact' => true, '_disableLayout' => 1])
+                    ))->openInModal()]
                 );
 
                 $addButton->openInModal();

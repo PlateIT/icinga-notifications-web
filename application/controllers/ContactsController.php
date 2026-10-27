@@ -90,10 +90,10 @@ class ContactsController extends CompatController
 
         $addButton = (new ButtonLink(
             $this->translate('Create Contact'),
-            Links::contactAdd(),
+            Links::contactAdd()->with(['showCompact' => true, '_disableLayout' => 1]),
             'plus',
             ['class' => 'add-new-component']
-        ))->setBaseTarget('_next');
+        ))->openInModal();
 
         $emptyStateMessage = null;
         if (Channel::on($this->db)->columns([new Expression('1')])->limit(1)->first() === null) {
@@ -129,16 +129,22 @@ class ContactsController extends CompatController
 
     public function addAction(): void
     {
+        $this->setTitle($this->translate('Create Contact'));
+
         (new ContactForm(new NotificationConfigProvider()))
+            ->setAction((string) Links::contactAdd()->with(['showCompact' => true, '_disableLayout' => 1]))
             ->on(Form::ON_REQUEST, function ($_, ContactForm $form) {
-                $this->addTitleTab($this->translate('Create Contact'));
                 $this->addContent($form);
             })
             ->on(Form::ON_SUBMIT, function (ContactForm $form) {
                 $contact = $form->getContact();
-                Database::get()->transaction(fn(Connection $db) => (new ContactRepository($db))->create($contact));
+                $contactId = Database::get()->transaction(
+                    fn(Connection $db) => (new ContactRepository($db))->create($contact)
+                );
                 Notification::success($this->translate('New contact has successfully been added'));
-                $this->switchToSingleColumnLayout();
+                $this->sendExtraUpdates(['#col1']);
+                $this->getResponse()->setHeader('X-Icinga-Container', 'col2');
+                $this->redirectNow(Links::contact($contactId));
             })->on(Form::ON_ERROR, function ($_, ContactForm $form) {
                 // TODO: I feel this should be part of CompatForm or CompatController (e.g. $this->sendForm())
                 $this->addPart($form, $this->content->getAttribute('id')->getValue());
