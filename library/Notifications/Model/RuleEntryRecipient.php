@@ -1,0 +1,109 @@
+<?php
+
+// SPDX-FileCopyrightText: 2023 Icinga GmbH <https://icinga.com>
+// SPDX-License-Identifier: GPL-3.0-or-later
+
+namespace Icinga\Module\Notifications\Model;
+
+use DateTime;
+use Icinga\Module\Notifications\Common\Model;
+use ipl\Orm\Behavior\BoolCast;
+use ipl\Orm\Behavior\MillisecondTimestamp;
+use ipl\Orm\Behaviors;
+use ipl\Orm\Query;
+use ipl\Orm\Relations;
+use ipl\Stdlib\Filter;
+
+/**
+ * @property int $id
+ * @property int $rule_entry_id
+ * @property ?int $contact_id
+ * @property ?int $contactgroup_id
+ * @property ?int $schedule_id
+ * @property ?int $channel_id
+ * @property DateTime $changed_at
+ * @property bool $deleted
+ *
+ * @property Query<RuleEntry>|RuleEntry $rule_entry
+ * @property Query<Contact>|Contact $contact
+ * @property Query<Schedule>|Schedule $schedule
+ * @property Query<Contactgroup>|Contactgroup $contactgroup
+ * @property Query<Channel>|Channel $channel
+ */
+class RuleEntryRecipient extends Model
+{
+    public function getTableName(): string
+    {
+        return 'rule_entry_recipient';
+    }
+
+    public function getKeyName(): string
+    {
+        return 'id';
+    }
+
+    public function getColumns(): array
+    {
+        return [
+            'rule_entry_id',
+            'contact_id',
+            'contactgroup_id',
+            'schedule_id',
+            'channel_id',
+            'changed_at',
+            'deleted'
+        ];
+    }
+
+    public function getColumnDefinitions(): array
+    {
+        return [
+            'rule_entry_id'      => t('Rule Entry ID'),
+            'contact_id'         => t('Contact ID'),
+            'contactgroup_id'    => t('Contactgroup ID'),
+            'schedule_id'        => t('Schedule ID'),
+            'channel_id'         => t('Channel ID'),
+            'changed_at'         => t('Changed At')
+        ];
+    }
+
+    public function getDefaultSort(): array
+    {
+        return ['rule_entry_id'];
+    }
+
+    public function createBehaviors(Behaviors $behaviors): void
+    {
+        $behaviors->add(new MillisecondTimestamp(['changed_at']));
+        $behaviors->add(new BoolCast(['deleted']));
+    }
+
+    public function createRelations(Relations $relations): void
+    {
+        $relations->belongsTo('rule_entry', RuleEntry::class);
+        $relations->belongsTo('contact', Contact::class)->setJoinType('LEFT');
+        $relations->belongsTo('schedule', Schedule::class)->setJoinType('LEFT');
+        $relations->belongsTo('contactgroup', Contactgroup::class)->setJoinType('LEFT');
+        $relations->belongsTo('channel', Channel::class)->setJoinType('LEFT');
+    }
+
+    /**
+     * Get the recipient model
+     *
+     * @return Contact|Contactgroup|Schedule|null
+     */
+    public function getRecipient(): Contact|Contactgroup|Schedule|null
+    {
+        return match (true) {
+            (bool) $this->contact_id      => $this->contact->first(),
+            (bool) $this->contactgroup_id => $this->contactgroup->first(),
+            (bool) $this->schedule_id     => $this->schedule->first(),
+            default                       => null
+        };
+    }
+
+    public function createVisibilityFilter(Filter\Chain $filter): void
+    {
+        $filter->add(Filter::equal('deleted', 'n'));
+    }
+}

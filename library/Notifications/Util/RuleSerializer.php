@@ -9,54 +9,80 @@ use Icinga\Exception\Json\JsonEncodeException;
 use Icinga\Util\Json;
 use ipl\Stdlib\Filter;
 use ipl\Stdlib\Filter\Chain;
-use ipl\Web\Filter\QueryString;
+use ipl\Stdlib\Filter\Rule;
+use JsonException;
 use RuntimeException;
+use UnexpectedValueException;
 
 class RuleSerializer
 {
     /** @var int The filter version */
     public const VERSION = 2;
 
-    /** @var ?string The name of the filter */
-    protected ?string $filterName;
-
-    /** @var Filter\Condition|Filter\Chain */
-    protected Filter\Rule $filter;
-
-    /** @var array<string, string[]> JSON paths keyed by column name */
-    protected array $jsonPaths;
-
-    /** @var bool Whether the filter was created with a source integration */
-    protected bool $assisted;
-
     /**
      * Create an object that can be used to serialize a rule to JSON
      *
-     * @param Filter\Rule $filter
-     * @param array<string, string[]> $jsonPaths JSON paths keyed by column name
+     * @param Rule $filter
+     * @param string $queryString
+     * @param array<string, string[]> $jsonPaths JSON paths keyed by column name, leave empty to use column names only
      * @param bool $assisted Whether the filter was created with a source integration
      * @param ?string $filterName The name of the filter
      */
-    public function __construct(Filter\Rule $filter, array $jsonPaths, bool $assisted, ?string $filterName = null)
+    public function __construct(
+        private readonly Filter\Rule $filter,
+        private readonly string $queryString,
+        private readonly array $jsonPaths = [],
+        private readonly bool $assisted = false,
+        private readonly ?string $filterName = null
+    ) {
+    }
+
+    /**
+     * Decode a serialized rule and verify its version
+     *
+     * @param string $json The serialized rule, as created by {@see static::getJson()}
+     *
+     * @return array{version: int, qs: string, assisted: bool, filter_name?: string, ast: array}
+     *
+     * @throws JsonException
+     * @throws UnexpectedValueException If the version does not match {@see static::VERSION}
+     */
+    public static function decode(string $json): array
     {
-        $this->filter = $filter;
-        $this->jsonPaths = $jsonPaths;
-        $this->assisted = $assisted;
-        $this->filterName = $filterName;
+        if (empty($json)) {
+            return [
+                'version' => self::VERSION,
+                'qs' => '',
+                'assisted' => false,
+                'ast' => []
+            ];
+        }
+
+        $decoded = json_decode($json, true, flags: JSON_THROW_ON_ERROR);
+        $version = $decoded['version'] ?? null;
+        if ($version !== self::VERSION) {
+            throw new UnexpectedValueException(sprintf(
+                'Filter version \'%s\' is not supported (expected %d)',
+                $version,
+                self::VERSION
+            ));
+        }
+
+        return $decoded;
     }
 
     /**
      * Serialize the filter as Json
      *
-     * @return ?string The serialized filter, `null` for an empty chain
+     * @return string The serialized filter, `''` for an empty chain
      *
      * @throws JsonEncodeException
      */
-    public function getJson(): ?string
+    public function getJson(): string
     {
         $result = [
             'version'  => self::VERSION,
-            'qs'       => QueryString::render($this->filter),
+            'qs'       => $this->queryString,
             'assisted' => $this->assisted,
         ];
 
@@ -66,7 +92,7 @@ class RuleSerializer
 
         if ($this->filter instanceof Filter\Chain) {
             if ($this->filter->isEmpty()) {
-                return null;
+                return '';
             }
 
             $result['ast'] = $this->serializeChain($this->filter);
@@ -134,11 +160,15 @@ class RuleSerializer
             : ['value' => $condition->getValue()];
 
         $column = $condition->getColumn();
-        if (
-            ! isset($this->jsonPaths[$column])
-            || ! is_array($this->jsonPaths[$column])
-            || empty($this->jsonPaths[$column])
+        if (empty($this->jsonPaths)) {
+            $attributes = [$column];
+        } elseif (
+            isset($this->jsonPaths[$column])
+            && is_array($this->jsonPaths[$column])
+            && ! empty($this->jsonPaths[$column])
         ) {
+            $attributes = $this->jsonPaths[$column];
+        } else {
             throw new RuntimeException(sprintf(
                 'Source hook did not provide a JSON path for column "%s"',
                 $column
@@ -147,7 +177,7 @@ class RuleSerializer
 
         return [
             'op' => $op,
-            'attributes' => $this->jsonPaths[$column],
+            'attributes' => $attributes,
             ...$value,
         ];
     }

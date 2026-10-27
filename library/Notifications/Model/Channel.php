@@ -15,7 +15,6 @@ use ipl\Orm\Behaviors;
 use ipl\Orm\Query;
 use ipl\Orm\Relations;
 use ipl\Stdlib\Filter;
-use ipl\Web\Widget\Icon;
 use Ramsey\Uuid\UuidInterface;
 
 /**
@@ -26,9 +25,10 @@ use Ramsey\Uuid\UuidInterface;
  * @property ?string $config
  * @property DateTime $changed_at
  * @property bool $deleted
+ * @property ?string $validation_result
  *
  * @property Query<IncidentHistory>|Collection<IncidentHistory> $incident_history
- * @property Query<RuleEscalationRecipient>|Collection<RuleEscalationRecipient> $rule_escalation_recipient
+ * @property Query<RuleEntryRecipient>|Collection<RuleEntryRecipient> $rule_entry_recipient
  * @property Query<Contact>|Collection<Contact> $contact
  * @property Query<AvailableChannelType>|AvailableChannelType $available_channel_type
  * @property Query<NotificationHistory>|Collection<NotificationHistory> $notification_history
@@ -53,17 +53,19 @@ class Channel extends Model
             'config',
             'changed_at',
             'deleted',
-            'external_uuid'
+            'external_uuid',
+            'validation_result'
         ];
     }
 
     public function getColumnDefinitions(): array
     {
         return [
-            'name'          => t('Name'),
-            'type'          => t('Type'),
-            'changed_at'    => t('Changed At'),
-            'external_uuid' => t('UUID')
+            'name'              => t('Name'),
+            'type'              => t('Type'),
+            'changed_at'        => t('Changed At'),
+            'external_uuid'     => t('UUID'),
+            'validation_result' => t('Validation Result')
         ];
     }
 
@@ -88,7 +90,7 @@ class Channel extends Model
     public function createRelations(Relations $relations): void
     {
         $relations->hasMany('incident_history', IncidentHistory::class)->setJoinType('LEFT');
-        $relations->hasMany('rule_escalation_recipient', RuleEscalationRecipient::class)->setJoinType('LEFT');
+        $relations->hasMany('rule_entry_recipient', RuleEntryRecipient::class)->setJoinType('LEFT');
         $relations->hasMany('contact', Contact::class)
             ->setJoinType('LEFT')
             ->setForeignKey('default_channel_id');
@@ -97,20 +99,6 @@ class Channel extends Model
             ->setJoinType('LEFT');
         $relations->hasMany('notification_history', NotificationHistory::class)
             ->setJoinType('LEFT');
-    }
-
-    /**
-     * Get the channel icon
-     *
-     * @return Icon
-     */
-    public function getIcon(): Icon
-    {
-        return match ($this->type) {
-            'rocketchat' => new Icon('comment-dots'),
-            'email'      => new Icon('at'),
-            default      => new Icon('envelope')
-        };
     }
 
     public function createVisibilityFilter(Filter\Chain $filter): void

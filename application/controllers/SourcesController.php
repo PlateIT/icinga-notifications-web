@@ -33,6 +33,8 @@ class SourcesController extends CompatController
     public function init(): void
     {
         $this->assertPermission('config/modules');
+
+        parent::init();
     }
 
     public function indexAction(): void
@@ -77,7 +79,7 @@ class SourcesController extends CompatController
         $sources->filter($filter);
 
         $addButton = (new ButtonLink(
-            t('Add Source'),
+            t('New Source'),
             Url::fromPath('notifications/sources/add'),
             'plus',
             ['class' => 'add-new-component']

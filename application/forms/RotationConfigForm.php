@@ -148,7 +148,7 @@ class RotationConfigForm extends CompatForm
      */
     public function getSubmitLabel(): string
     {
-        return $this->submitLabel ?? $this->translate('Add Rotation');
+        return $this->submitLabel ?? $this->translate('Create Rotation');
     }
 
     /**
@@ -262,7 +262,7 @@ class RotationConfigForm extends CompatForm
         ];
 
         $modeList = new HtmlElement('ul', Attributes::create([
-            'class' => ['rotation-mode', $this->disableModeSelection ? 'disabled' : '']
+            'class' => ['pictogram-selection', $this->disableModeSelection ? 'disabled' : '']
         ]));
         foreach ($modes as $mode => $label) {
             $radio = $this->createElement('input', 'mode', [
@@ -336,7 +336,7 @@ class RotationConfigForm extends CompatForm
                     'label',
                     null,
                     $radio,
-                    new HtmlElement('div', Attributes::create(['class' => ['mode-img', 'img-' . $mode]])),
+                    new HtmlElement('div', Attributes::create(['class' => ['pictogram', 'img-' . $mode]])),
                     Text::create($label),
                     ...$labelDescription
                 )
@@ -957,7 +957,7 @@ class RotationConfigForm extends CompatForm
             $additionalButtons = [];
             if (isset($this->rotation->previousShift) || isset($this->rotation->nextHandoff)) {
                 $removeAllBtn = $this->createElement('submit', 'remove_all', [
-                    'label' => $this->translate('Remove All'),
+                    'label' => $this->translate('Remove All Versions'),
                     'class' => 'btn-remove',
                     'formnovalidate' => true
                 ]);
@@ -966,7 +966,7 @@ class RotationConfigForm extends CompatForm
             }
 
             $removeBtn = $this->createElement('submit', 'remove', [
-                'label' => $this->translate('Remove'),
+                'label' => $this->translate('Delete Rotation'),
                 'class' => 'btn-remove',
                 'formnovalidate' => true
             ]);
@@ -974,7 +974,7 @@ class RotationConfigForm extends CompatForm
             $additionalButtons[] = $removeBtn;
 
             $duplicateBtn = $this->createElement('submit', 'duplicate', [
-                'label' => $this->translate('Duplicate')
+                'label' => $this->translate('Duplicate Rotation')
             ]);
             $this->registerElement($duplicateBtn);
             $additionalButtons[] = $duplicateBtn;

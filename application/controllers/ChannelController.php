@@ -11,13 +11,17 @@ use Icinga\Module\Notifications\Repository\ChannelRepository;
 use Icinga\Web\Notification;
 use ipl\Html\Contract\Form;
 use ipl\Sql\Connection;
+use ipl\Web\Common\CalloutType;
 use ipl\Web\Compat\CompatController;
+use ipl\Web\Widget\Callout;
 
 class ChannelController extends CompatController
 {
     public function init(): void
     {
         $this->assertPermission('config/modules');
+
+        parent::init();
     }
 
     public function indexAction(): void
@@ -33,6 +37,16 @@ class ChannelController extends CompatController
                 $form->setChannel($channel);
 
                 $this->addTitleTab(sprintf($this->translate('Channel: %s'), $channel->name));
+
+                if (isset($channel->validation_result)) {
+                    $this->addContent(new Callout(
+                        CalloutType::Error,
+                        sprintf(
+                            $this->translate('Channel validation failed: %s'),
+                            $channel->validation_result
+                        )
+                    ));
+                }
 
                 $this->addContent($form);
             })
@@ -56,6 +70,9 @@ class ChannelController extends CompatController
                         $channel->name
                     ));
                 }
+
+                // Request a single auto refresh of col1 to have at least a chance to see the validation result
+                $this->getResponse()->setHeader('X-Icinga-Refresh', '5');
 
                 $this->redirectNow('__CLOSE__');
             })->on(Form::ON_ERROR, function ($_, ChannelForm $form) {

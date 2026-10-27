@@ -5,6 +5,7 @@
 
 namespace Icinga\Module\Notifications\Common;
 
+use InvalidArgumentException;
 use ipl\Web\Url;
 
 /**
@@ -25,6 +26,11 @@ abstract class Links
     public static function incident(int $id): Url
     {
         return Url::fromPath('notifications/incident', ['id' => $id]);
+    }
+
+    public static function history(): Url
+    {
+        return Url::fromPath('notifications/history');
     }
 
     public static function contacts(): Url
@@ -65,6 +71,40 @@ abstract class Links
     public static function eventRule(int $id): Url
     {
         return Url::fromPath('notifications/event-rule', ['id' => $id]);
+    }
+
+    public static function eventRuleFilter(int $id): Url
+    {
+        return Url::fromPath('notifications/event-rule/search-editor', ['id' => $id]);
+    }
+
+    public static function escalationEdit(int $id): Url
+    {
+        return Url::fromPath('notifications/escalation-rule/edit', ['id' => $id]);
+    }
+
+    public static function escalationAdd(int $ruleId, int $position): Url
+    {
+        return Url::fromPath('notifications/escalation-rule/add', [
+            'rule' => $ruleId,
+            'position' => $position
+        ]);
+    }
+
+    public static function notificationRecipientsEdit(int $id): Url
+    {
+        return Url::fromPath('notifications/notification-rule/edit', ['id' => $id]);
+    }
+
+    public static function notificationRecipientsAdd(int $ruleId, int $position): Url
+    {
+        if ($position !== 0) {
+            throw new InvalidArgumentException('Position must be 0 when adding a new notification recipient');
+        }
+
+        return Url::fromPath('notifications/notification-rule/add', [
+            'rule' => $ruleId
+        ]);
     }
 
     public static function schedules(): Url

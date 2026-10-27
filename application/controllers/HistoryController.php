@@ -28,12 +28,20 @@ class HistoryController extends CompatController
     use SearchControls;
     use Controls;
 
+    public function init()
+    {
+        $this->assertPermission('notifications/view/history');
+
+        parent::init();
+    }
+
     public function indexAction(): void
     {
         $this->addTitleTab(t('Notification History'));
 
         $notificationHistory = NotificationHistory::on(Database::get())
-            ->with(['channel.available_channel_type', 'contact', 'contactgroup', 'schedule']);
+            ->with(['contact', 'contactgroup', 'schedule'])
+            ->withColumns(['channel_label' => 'channel.available_channel_type.name']);
 
         $limitControl = $this->createLimitControl();
         $sortControl = $this->createSortControl(

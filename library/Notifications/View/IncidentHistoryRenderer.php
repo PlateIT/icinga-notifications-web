@@ -5,9 +5,12 @@
 
 namespace Icinga\Module\Notifications\View;
 
+use Icinga\Application\Logger;
 use Icinga\Module\Notifications\Common\Icons;
 use Icinga\Module\Notifications\Common\IncidentHistoryType;
 use Icinga\Module\Notifications\Model\IncidentHistory;
+use Icinga\Module\Notifications\Util\RuleSerializer;
+use Icinga\Module\Notifications\Widget\EventRule\EscalationCondition;
 use Icinga\Module\Notifications\Widget\IconBall;
 use ipl\Html\Attributes;
 use ipl\Html\FormattedString;
@@ -18,6 +21,7 @@ use ipl\Html\ValidHtml;
 use ipl\I18n\Translation;
 use ipl\Web\Common\ItemRenderer;
 use ipl\Web\Widget\TimeAgo;
+use Throwable;
 use UnhandledMatchError;
 
 /** @implements ItemRenderer<IncidentHistory> */
@@ -130,11 +134,11 @@ class IncidentHistoryRenderer implements ItemRenderer
                 break;
             case IncidentHistoryType::NOTIFIED:
                 if (isset($item->contactgroup->name) && isset($item->contact->full_name)) {
-                    if (isset($item->channel->type)) {
+                    if (isset($item->channel_label)) {
                         $message = sprintf(
                             $this->translate('Contact %s notified via %s as member of contact group %s'),
                             $item->contact->full_name,
-                            $item->channel->type,
+                            $item->channel_label,
                             $item->contactgroup->name
                         );
                     } else {
@@ -145,11 +149,11 @@ class IncidentHistoryRenderer implements ItemRenderer
                         );
                     }
                 } elseif (isset($item->schedule->name) && isset($item->contact->full_name)) {
-                    if (isset($item->channel->type)) {
+                    if (isset($item->channel_label)) {
                         $message = sprintf(
                             $this->translate('Contact %s notified via %s as member of schedule %s'),
                             $item->contact->full_name,
-                            $item->channel->type,
+                            $item->channel_label,
                             $item->schedule->name
                         );
                     } else {
@@ -160,11 +164,11 @@ class IncidentHistoryRenderer implements ItemRenderer
                         );
                     }
                 } elseif (isset($item->contact->full_name)) {
-                    if (isset($item->channel->type)) {
+                    if (isset($item->channel_label)) {
                         $message = sprintf(
                             $this->translate('Contact %s notified via %s'),
                             $item->contact->full_name,
-                            $item->channel->type
+                            $item->channel_label
                         );
                     } else {
                         $message = sprintf(
@@ -173,10 +177,10 @@ class IncidentHistoryRenderer implements ItemRenderer
                         );
                     }
                 } else {
-                    if (isset($item->channel->type)) {
+                    if (isset($item->channel_label)) {
                         $message = sprintf(
                             $this->translate('Unknown recipient notified via %s'),
-                            $item->channel->type
+                            $item->channel_label
                         );
                     } else {
                         $message = $this->translate('Unknown recipient notified');
@@ -209,21 +213,23 @@ class IncidentHistoryRenderer implements ItemRenderer
             case IncidentHistoryType::RECIPIENT_ROLE_CHANGED:
                 $newRole = $item->new_recipient_role;
                 $message = '';
-                if ($newRole === 'manager' || (! $newRole && $item->old_recipient_role === 'manager')) {
+                if ($newRole === 'manager' || $item->old_recipient_role === 'manager') {
                     if (isset($item->contact->full_name)) {
-                        $message = ! $newRole
-                            ? sprintf(
+                        $message = match ($newRole) {
+                            'manager' => sprintf(
+                                $this->translate('Contact %s started managing this incident'),
+                                $item->contact->full_name
+                            ),
+                            'subscriber' => sprintf(
                                 $this->translate('Contact %s stopped managing this incident'),
                                 $item->contact->full_name
                             )
-                            : sprintf(
-                                $this->translate('Contact %s started managing this incident'),
-                                $item->contact->full_name
-                            );
+                        };
                     } else {
-                        $message = ! $newRole
-                            ? $this->translate('Unknown recipient stopped managing this incident')
-                            : $this->translate('Unknown recipient started managing this incident');
+                        $message = match ($newRole) {
+                            'manager' => $this->translate('Unknown recipient started managing this incident'),
+                            'subscriber' => $this->translate('Unknown recipient stopped managing this incident')
+                        };
                     }
                 } elseif (
                     $newRole === 'subscriber'
@@ -259,21 +265,31 @@ class IncidentHistoryRenderer implements ItemRenderer
                 break;
             case IncidentHistoryType::ESCALATION_TRIGGERED:
                 if (isset($item->rule->name)) {
-                    // TODO: No name is no reason to claim an unknown escalation, describe conditions instead
-                    if (isset($item->rule_escalation->name)) {
-                        $message = sprintf(
-                            $this->translate('Rule %s reached escalation %s'),
-                            $item->rule->name,
-                            $item->rule_escalation->name
-                        );
+                    if ($item->rule_entry->condition === null) {
+                        $message = sprintf($this->translate('Rule %s escalated immediately'), $item->rule->name);
                     } else {
-                        $message = sprintf(
-                            $this->translate('Rule %s reached unknown escalation'),
-                            $item->rule->name
-                        );
+                        try {
+                            $message = FormattedString::create(
+                                $this->translate('Rule %s escalated: %s'),
+                                $item->rule->name,
+                                EscalationCondition::fromQueryString(
+                                    RuleSerializer::decode($item->rule_entry->condition)['qs']
+                                )->usePastTense()
+                            );
+                        } catch (Throwable $e) {
+                            Logger::error(
+                                'Failed to describe the condition of rule_entry %d: %s',
+                                $item->rule_entry->id,
+                                $e
+                            );
+                            $message = sprintf(
+                                $this->translate('Rule %s escalated: Unable to describe the escalation condition'),
+                                $item->rule->name
+                            );
+                        }
                     }
                 } else {
-                    $message = $this->translate('Unknown rule reached escalation');
+                    $message = $this->translate('Unknown rule escalated');
                 }
 
                 break;

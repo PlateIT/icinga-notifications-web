@@ -1,0 +1,182 @@
+<?php
+
+// SPDX-FileCopyrightText: 2026 Icinga GmbH <https://icinga.com>
+// SPDX-License-Identifier: GPL-3.0-or-later
+
+namespace Icinga\Module\Notifications\Repository;
+
+use Icinga\Module\Notifications\Common\Collection;
+use Icinga\Module\Notifications\Common\EntityManager;
+use Icinga\Module\Notifications\Form\Data\RuleEntry as RuleEntryData;
+use Icinga\Module\Notifications\Model\RuleEntry;
+use Icinga\Module\Notifications\Model\RuleEntryRecipient;
+use InvalidArgumentException;
+use ipl\Sql\Connection;
+use ipl\Stdlib\Filter;
+
+final class RuleEntryRepository
+{
+    /**
+     * Create a `RuleEntryRepository` instance
+     *
+     * @param Connection $db Database to operate on
+     */
+    public function __construct(
+        private Connection $db
+    ) {
+    }
+
+    /**
+     * Fetch the entry with the given ID
+     *
+     * @param int $id
+     *
+     * @return ?RuleEntry
+     */
+    public function find(int $id): ?RuleEntry
+    {
+        return RuleEntry::on($this->db)
+            ->filter(Filter::equal('id', $id))
+            ->first();
+    }
+
+    /**
+     * Store a new entry
+     *
+     * @param RuleEntryData $entry
+     *
+     * @return int The entry's ID
+     */
+    public function create(RuleEntryData $entry): int
+    {
+        $model = (new RuleEntry())->setNew();
+        $model->rule_id = $entry->ruleId;
+        $model->position = $entry->position;
+        $model->condition = $entry->condition ?: null;
+
+        $recipients = [];
+        foreach ($entry->recipients as $recipient) {
+            $recipientModel = (new RuleEntryRecipient())->setNew();
+            $typeId = match ($recipient->type) {
+                'contact' => 'contact_id',
+                'contact_group' => 'contactgroup_id',
+                'schedule' => 'schedule_id'
+            };
+
+            $recipientModel->{$typeId} = $recipient->recipientId;
+            $recipientModel->channel_id = $recipient->channelId;
+
+            $recipients[] = $recipientModel;
+        }
+
+        $model->rule_entry_recipient = Collection::create(RuleEntryRecipient::class, $recipients);
+
+        (new EntityManager($this->db))->save($model);
+
+        return $model->id;
+    }
+
+    /**
+     * Update the given entry
+     *
+     * @param RuleEntryData $entry
+     *
+     * @return void
+     *
+     * @throws InvalidArgumentException if the entry does not exist
+     */
+    public function update(RuleEntryData $entry): void
+    {
+        $model = $this->find($entry->id)?->setNew(false);
+        if ($model === null) {
+            throw new InvalidArgumentException('Cannot update a rule entry that does not exist');
+        }
+
+        $model->position = $entry->position;
+        $model->condition = $entry->condition ?: null;
+
+        $recipientsToKeep = [];
+        foreach ($entry->recipients as $recipient) {
+            if (isset($recipient->id)) {
+                $recipientsToKeep[$recipient->id] = $recipient;
+            }
+        }
+
+        foreach ($model->rule_entry_recipient as $recipientModel) {
+            if (isset($recipientsToKeep[$recipientModel->id])) {
+                $recipient = $recipientsToKeep[$recipientModel->id];
+                [$typeId, $oppositeKeys] = match ($recipient->type) {
+                    'contact' => ['contact_id', ['contactgroup_id', 'schedule_id']],
+                    'contact_group' => ['contactgroup_id', ['contact_id', 'schedule_id']],
+                    'schedule' => ['schedule_id', ['contact_id', 'contactgroup_id']]
+                };
+                $recipientModel->{$typeId} = $recipient->recipientId;
+                $recipientModel->channel_id = $recipient->channelId;
+                foreach ($oppositeKeys as $oppositeKey) {
+                    $recipientModel->{$oppositeKey} = null;
+                }
+            } else {
+                $model->rule_entry_recipient->detach($recipientModel);
+            }
+        }
+
+        foreach ($entry->recipients as $recipient) {
+            if (isset($recipient->id)) {
+                continue;
+            }
+
+            $recipientModel = (new RuleEntryRecipient())->setNew();
+            $typeId = match ($recipient->type) {
+                'contact' => 'contact_id',
+                'contact_group' => 'contactgroup_id',
+                'schedule' => 'schedule_id'
+            };
+
+            $recipientModel->{$typeId} = $recipient->recipientId;
+            $recipientModel->channel_id = $recipient->channelId;
+
+            $model->rule_entry_recipient->attach($recipientModel);
+        }
+
+        (new EntityManager($this->db))->save($model);
+    }
+
+    /**
+     * Delete the entry with the given ID
+     *
+     * @param int $id
+     *
+     * @return void
+     *
+     * @throws InvalidArgumentException if the entry does not exist
+     */
+    public function delete(int $id): void
+    {
+        $entry = $this->find($id)?->setNew(false);
+        if ($entry === null) {
+            throw new InvalidArgumentException('Cannot delete a rule entry that does not exist');
+        }
+
+        $entityManager = new EntityManager($this->db);
+        $freedPosition = $entry->position;
+
+        $entry->position = null;
+        $entry->rule_entry_recipient = [];
+        $entry->delete();
+
+        $entityManager->save($entry);
+
+        if ($freedPosition > 0) {
+            $siblings = RuleEntry::on($this->db)
+                ->columns(['id', 'position'])
+                ->filter(Filter::equal('rule_id', $entry->rule_id))
+                ->filter(Filter::greaterThan('position', $freedPosition))
+                ->orderBy('position', SORT_ASC);
+            foreach ($siblings as $sibling) {
+                $sibling->setNew(false);
+                $sibling->position -= 1;
+                $entityManager->save($sibling);
+            }
+        }
+    }
+}

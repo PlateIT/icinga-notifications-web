@@ -7,8 +7,10 @@ namespace Tests\Icinga\Module\Notifications\Util;
 
 use Icinga\Module\Notifications\Util\RuleSerializer;
 use ipl\Stdlib\Filter;
+use JsonException;
 use PHPUnit\Framework\TestCase;
 use RuntimeException;
+use UnexpectedValueException;
 
 class RuleSerializerTest extends TestCase
 {
@@ -16,7 +18,7 @@ class RuleSerializerTest extends TestCase
     {
         $filter = Filter::equal('a', 'x');
 
-        $result = json_decode((new RuleSerializer($filter, ['a' => ['$.a']], true))->getJson(), true);
+        $result = json_decode((new RuleSerializer($filter, 'a=x', ['a' => ['$.a']], true))->getJson(), true);
 
         $this->assertSame(RuleSerializer::VERSION, $result['version']);
         $this->assertSame('a=x', $result['qs']);
@@ -39,7 +41,7 @@ class RuleSerializerTest extends TestCase
             'column4' => ['$.d'],
         ];
 
-        $result = json_decode((new RuleSerializer($filter, $jsonPaths, false))->getJson(), true);
+        $result = json_decode((new RuleSerializer($filter, '', $jsonPaths, false))->getJson(), true);
 
         $this->assertSame('&', $result['ast']['op']);
         $this->assertSame(
@@ -64,7 +66,7 @@ class RuleSerializerTest extends TestCase
             ),
         );
 
-        $result = json_decode((new RuleSerializer($filter, ['a' => ['$.a']], true))->getJson(), true);
+        $result = json_decode((new RuleSerializer($filter, '', ['a' => ['$.a']], true))->getJson(), true);
 
         $this->assertSame('!', $result['ast']['rules'][0]['op']);
         $this->assertSame('|', $result['ast']['rules'][1]['op']);
@@ -78,7 +80,7 @@ class RuleSerializerTest extends TestCase
             Filter::unlike('a', '*bar[foo]'),
         );
 
-        $result = json_decode((new RuleSerializer($filter, ['a' => ['$.a']], true))->getJson(), true);
+        $result = json_decode((new RuleSerializer($filter, '', ['a' => ['$.a']], true))->getJson(), true);
 
         $this->assertArrayNotHasKey('value', $result['ast']);
         $this->assertSame('^.*foo\\.bar.*$', $result['ast']['rules'][0]['regex']);
@@ -92,21 +94,21 @@ class RuleSerializerTest extends TestCase
         $this->expectException(RuntimeException::class);
         $this->expectExceptionMessage('Source hook did not provide a JSON path for column "absent"');
 
-        (new RuleSerializer($filter, [], true))->getJson();
+        (new RuleSerializer($filter, '', ['existing' => ['ex']], true))->getJson();
     }
 
-    public function testGetJsonReturnsNullForEmptyChain()
+    public function testGetJsonReturnsTheEmptyStringForEmptyChain()
     {
-        $result = (new RuleSerializer(Filter::all(), [], true))->getJson();
+        $result = (new RuleSerializer(Filter::all(), '', [], true))->getJson();
 
-        $this->assertNull($result);
+        $this->assertSame('', $result);
     }
 
     public function testGetJsonIncludesFilterNameWhenProvided()
     {
         $filter = Filter::equal('a', 'x');
 
-        $result = json_decode((new RuleSerializer($filter, ['a' => ['$.a']], true, 'my filter'))->getJson(), true);
+        $result = json_decode((new RuleSerializer($filter, '', ['a' => ['$.a']], true, 'my filter'))->getJson(), true);
 
         $this->assertSame('my filter', $result['filter_name']);
     }
@@ -115,8 +117,38 @@ class RuleSerializerTest extends TestCase
     {
         $filter = Filter::equal('a', 'x');
 
-        $result = json_decode((new RuleSerializer($filter, ['a' => ['$.a']], true))->getJson(), true);
+        $result = json_decode((new RuleSerializer($filter, '', ['a' => ['$.a']], true))->getJson(), true);
 
         $this->assertNotContains('filter_name', $result);
+    }
+
+    public function testDecodeReturnsWhatGetJsonEncoded()
+    {
+        $filter = Filter::equal('a', 'x');
+        $json = (new RuleSerializer($filter, 'a=x', ['a' => ['$.a']], true, 'my filter'))->getJson();
+
+        $this->assertSame(json_decode($json, true), RuleSerializer::decode($json));
+    }
+
+    public function testDecodeThrowsOnInvalidJson()
+    {
+        $this->expectException(JsonException::class);
+
+        RuleSerializer::decode('a=x');
+    }
+
+    public function testDecodeThrowsOnUnsupportedVersion()
+    {
+        $this->expectException(UnexpectedValueException::class);
+        $this->expectExceptionMessage('Filter version \'1\' is not supported');
+
+        RuleSerializer::decode(json_encode(['version' => 1, 'qs' => 'a=x']));
+    }
+
+    public function testDecodeThrowsOnMissingVersion()
+    {
+        $this->expectException(UnexpectedValueException::class);
+
+        RuleSerializer::decode(json_encode(['qs' => 'a=x']));
     }
 }

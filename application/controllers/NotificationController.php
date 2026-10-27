@@ -18,6 +18,13 @@ class NotificationController extends CompatController
 {
     use Auth;
 
+    public function init()
+    {
+        $this->assertPermission('notifications/view/history');
+
+        parent::init();
+    }
+
     public function indexAction(): void
     {
         $this->addTitleTab(t('Notification'));
@@ -31,9 +38,9 @@ class NotificationController extends CompatController
                 'schedule',
                 'channel',
                 'incident',
-                'incident.object',
+                'object',
             ])
-            ->withColumns(['incident.object.sources'])
+            ->withColumns(['object.sources', 'channel_label' => 'channel.available_channel_type.name'])
             ->filter(Filter::equal('id', $id));
 
         $this->applyRestrictions($query);

@@ -4,7 +4,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 use Icinga\Application\Modules\Module;
-use Icinga\Authentication\Auth;
+use Icinga\Module\Notifications\Common\Icons;
+use Icinga\Module\Notifications\Common\Links;
 
 /** @var Module $this */
 
@@ -16,25 +17,12 @@ $section = $this->menuSection(
     ]
 );
 
-$auth = Auth::getInstance();
-$authenticated = $auth->getUser() !== null;
-
-$configLandingPage = null;
-if ($authenticated) {
-    if ($auth->hasPermission('notifications/config/schedules')) {
-        $configLandingPage = 'notifications/schedules';
-    } elseif ($auth->hasPermission('notifications/config/event-rules')) {
-        $configLandingPage = 'notifications/event-rules';
-    } elseif ($auth->hasPermission('notifications/config/contacts')) {
-        $configLandingPage = 'notifications/contacts';
-    }
-}
-
 $section->add(
-    N_('Open Incidents'),
+    N_('Incidents'),
     [
         'icon'          => 'th-list',
         'description'   => $this->translate('Open Incidents'),
+        'permission'    => 'notifications/view/incidents',
         'url'           => 'notifications/incidents?incident.recovered_at!~%2A',
         'priority'      => 10
     ]
@@ -54,23 +42,64 @@ $section->add(
     N_('Notification History'),
     [
         'icon'          => 'paper-plane',
-        'description'   => $this->translate('Notification delivery history'),
-        'url'           => 'notifications/history',
+        'description'   => $this->translate('List sent and failed notifications.'),
+        'permission'    => 'notifications/view/history',
+        'url'           => Links::history(),
         'priority'      => 20
     ]
 );
 
-if ($configLandingPage !== null) {
-    $section->add(
-        N_('Configuration'),
-        [
-            'icon'          => 'wrench',
-            'description'   => $this->translate('Configuration'),
-            'url'           => $configLandingPage,
-            'priority'      => 30
-        ]
-    );
-}
+$section->add(
+    N_('Event Rules'),
+    [
+        'icon'          => Icons::RULE_MATCHED,
+        'description'   => $this->translate(
+            'Define rules when to route events to whom. Escalation rules notify recipients in stages and'
+            . ' escalate based on incident age or severity. Notification rules notify a fixed set of recipients'
+            . ' as soon as an event matches the filter.'
+        ),
+        'permission'    => 'notifications/config/event-rules',
+        'url'           => Links::eventRules(),
+        'priority'      => 30
+    ]
+);
+
+$section->add(
+    N_('Schedules'),
+    [
+        'icon'          => Icons::SCHEDULE,
+        'description'   => $this->translate(
+            'Organize contacts and contact groups in time-based schedules and let them rotate automatically.'
+            . ' You can define multiple rotations with different patterns to set priorities.'
+            . ' Schedules can also be used as recipients for event rules.'
+        ),
+        'permission'    => 'notifications/config/schedules',
+        'url'           => Links::schedules(),
+        'priority'      => 40
+    ]
+);
+
+$section->add(
+    N_('Contacts'),
+    [
+        'icon'          => Icons::USER,
+        'description'   => $this->translate('Configure contacts and their channel specific addresses.'),
+        'permission'    => 'notifications/config/contacts',
+        'url'           => Links::contacts(),
+        'priority'      => 50
+    ]
+);
+
+$section->add(
+    N_('Contact Groups'),
+    [
+        'icon'          => Icons::CONTACTGROUP,
+        'description'   => $this->translate('Combine multiple contacts in groups.'),
+        'permission'    => 'notifications/config/contacts',
+        'url'           => Links::contactGroups(),
+        'priority'      => 60
+    ]
+);
 
 $this->providePermission(
     'notifications/config/schedules',
@@ -93,14 +122,19 @@ $this->providePermission(
 );
 
 $this->providePermission(
+    'notifications/view/incidents',
+    $this->translate('Allow to view incidents')
+);
+
+$this->providePermission(
+    'notifications/view/history',
+    $this->translate('Allow to view history of notifications')
+);
+
+$this->providePermission(
     'notifications/api',
     $this->translate('Allow to modify configuration via API')
 );
-
-//$this->provideRestriction(
-//    'notifications/filter/objects',
-//    $this->translate('Restrict access to the objects that match the filter')
-//);
 
 $this->provideConfigTab(
     'database',
@@ -142,3 +176,4 @@ foreach ($cssFiles as $path) {
 }
 
 $this->provideJsFile('notifications.js');
+$this->provideJsFile('quick-action.js');

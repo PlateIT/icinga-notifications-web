@@ -1,0 +1,93 @@
+<?php
+
+// SPDX-FileCopyrightText: 2025 Icinga GmbH <https://icinga.com>
+// SPDX-License-Identifier: GPL-3.0-or-later
+
+namespace Icinga\Module\Notifications\Forms\RuleEntryForm;
+
+use ipl\Html\Attributes;
+use ipl\Html\Contract\FormElement;
+use ipl\Html\FormElement\FieldsetElement;
+use ipl\Html\FormElement\SubmitButtonElement;
+use ipl\Html\HtmlElement;
+use ipl\Html\Text;
+use ipl\Stdlib\Filter;
+use ipl\Stdlib\Filter\Condition;
+use ipl\Web\Filter\QueryString;
+use ipl\Web\Widget\Icon;
+
+/**
+ * @phpstan-import-type ConditionValues from EscalationCondition
+ */
+class EscalationConditions extends FieldsetElement
+{
+    use DynamicElements;
+
+    protected $defaultAttributes = ['class' => 'escalation-conditions'];
+
+    protected function createAddButton(): SubmitButtonElement
+    {
+        /** @var SubmitButtonElement $button */
+        $button = $this->createElement('submitButton', 'add-button', [
+            'title' => $this->translate('Add Condition'),
+            'label' => [
+                new Icon('plus'),
+                new HtmlElement('span', content: Text::create($this->translate('Add Condition')))
+            ],
+            'class' => ['add-button', 'animated', 'link-button']
+        ]);
+
+        $button->addWrapper(new HtmlElement('div', Attributes::create(['class' => 'add-button-wrapper'])));
+
+        return $button;
+    }
+
+    protected function createDynamicElement(int $no, ?SubmitButtonElement $removeButton): FormElement
+    {
+        $condition = new EscalationCondition($no);
+        if ($removeButton !== null) {
+            $condition->setRemoveButton($removeButton);
+        }
+
+        return $condition;
+    }
+
+    /**
+     * Prepare the condition for display
+     *
+     * @param string $query The query string
+     *
+     * @return array<ConditionValues>
+     */
+    public static function prepare(string $query): array
+    {
+        $filters = QueryString::parse($query);
+        if ($filters instanceof Condition) {
+            $filters = [$filters];
+        }
+
+        $conditions = [];
+        foreach ($filters as $condition) {
+            $conditions[] = EscalationCondition::prepare($condition);
+        }
+
+        return $conditions;
+    }
+
+    /**
+     * Get the condition to store
+     *
+     * @return array{0: Filter\Rule, 1: string}
+     */
+    public function getCondition(): array
+    {
+        $filters = Filter::all();
+        foreach ($this->ensureAssembled()->getElements() as $element) {
+            if ($element instanceof EscalationCondition) {
+                $filters->add($element->getCondition());
+            }
+        }
+
+        return [$filters, QueryString::render($filters)];
+    }
+}

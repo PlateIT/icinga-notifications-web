@@ -5,6 +5,8 @@
 
 namespace Icinga\Module\Notifications\Widget\Detail;
 
+use Icinga\Application\Config;
+use Icinga\Module\Notifications\Common\Auth;
 use Icinga\Module\Notifications\Common\Icons;
 use Icinga\Module\Notifications\Model\NotificationHistory;
 use Icinga\Module\Notifications\View\IncidentRenderer;
@@ -22,6 +24,7 @@ use ipl\Web\Widget\Time;
 
 class NotificationDetail extends BaseHtmlElement
 {
+    use Auth;
     use Translation;
 
     protected NotificationHistory $notificationHistory;
@@ -41,12 +44,19 @@ class NotificationDetail extends BaseHtmlElement
     protected function createMessage(): array
     {
         $message = new HtmlElement(
-            'div',
+            'pre',
             Attributes::create([
                 'class' => ['message', 'collapsible'],
                 'data-visible-height' => 100
             ]),
-            Text::create($this->notificationHistory->event_message)
+            Text::create(
+                substr(
+                    $this->notificationHistory->event_message,
+                    0,
+                    (int) Config::module('notifications')
+                        ->get('settings', 'event_message_character_limit', 10000)
+                )
+            )
         );
 
         CopyToClipboard::attachTo($message);
@@ -110,11 +120,10 @@ class NotificationDetail extends BaseHtmlElement
             new HtmlElement(
                 'div',
                 Attributes::create(['class' => 'channel']),
-                $channel->getIcon(),
                 Text::create(sprintf(
                     '%s (%s)',
                     $channel->name ?? $this->translate('unknown'),
-                    $channel->type ?? $this->translate('deleted')
+                    $this->notificationHistory->channel_label ?? $this->translate('deleted')
                 ))
             )
         ];
@@ -138,6 +147,16 @@ class NotificationDetail extends BaseHtmlElement
 
     protected function createIncident(): array
     {
+        if (
+            ! isset($this->notificationHistory->incident_id)
+            || ! $this->getAuth()->hasPermission('notifications/view/incidents')
+        ) {
+            return [];
+        }
+
+        // Prepare incident so that the object relation is available required by the incident renderer
+        $this->notificationHistory->incident->object = $this->notificationHistory->object;
+
         return [
             new HtmlElement('h2', content: Text::create($this->translate('Related Incident'))),
             new ObjectList([$this->notificationHistory->incident], new IncidentRenderer())

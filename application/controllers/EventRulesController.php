@@ -5,43 +5,45 @@
 
 namespace Icinga\Module\Notifications\Controllers;
 
-use Icinga\Module\Notifications\Common\ConfigurationTabs;
 use Icinga\Module\Notifications\Common\Database;
 use Icinga\Module\Notifications\Common\Links;
 use Icinga\Module\Notifications\Forms\EventRuleForm;
 use Icinga\Module\Notifications\Model\Rule;
 use Icinga\Module\Notifications\Model\Source;
+use Icinga\Module\Notifications\Repository\RuleRepository;
 use Icinga\Module\Notifications\View\EventRuleRenderer;
 use Icinga\Module\Notifications\Web\Control\SearchBar\ObjectSuggestions;
 use Icinga\Module\Notifications\Widget\ItemList\ObjectList;
+use Icinga\Web\Notification;
 use Icinga\Web\Session;
-use ipl\Html\Form;
+use ipl\Html\Contract\Form;
 use ipl\Html\TemplateString;
+use ipl\Sql\Connection;
 use ipl\Sql\Expression;
 use ipl\Web\Compat\CompatController;
 use ipl\Web\Compat\SearchControls;
 use ipl\Web\Control\LimitControl;
 use ipl\Web\Control\SortControl;
 use ipl\Web\Filter\QueryString;
-use ipl\Web\Layout\DetailedItemLayout;
+use ipl\Web\Layout\MinimalItemLayout;
 use ipl\Web\Url;
 use ipl\Web\Widget\ActionLink;
 use ipl\Web\Widget\ButtonLink;
 
 class EventRulesController extends CompatController
 {
-    use ConfigurationTabs;
     use SearchControls;
 
     public function init(): void
     {
         $this->assertPermission('notifications/config/event-rules');
+
+        parent::init();
     }
 
     public function indexAction(): void
     {
-        $this->setTitle($this->translate('Event Rules'));
-        $this->getTabs()->activate('event-rules');
+        $this->addTitleTab($this->translate('Event Rules'));
 
         $eventRules = Rule::on(Database::get());
 
@@ -83,7 +85,7 @@ class EventRulesController extends CompatController
         $this->addControl($searchBar);
 
         $addButton = new ButtonLink(
-            $this->translate('Create Event Rule'),
+            $this->translate('New Event Rule'),
             Url::fromPath('notifications/event-rules/add'),
             'plus',
             ['class' => 'add-new-component']
@@ -108,7 +110,7 @@ class EventRulesController extends CompatController
 
         $this->addContent(
             (new ObjectList($eventRules, new EventRuleRenderer()))
-                ->setItemLayoutClass(DetailedItemLayout::class)
+                ->setItemLayoutClass(MinimalItemLayout::class)
                 ->setEmptyStateMessage($emptyStateMessage)
         );
 
@@ -119,10 +121,9 @@ class EventRulesController extends CompatController
 
     public function addAction(): void
     {
-        $this->setTitle($this->translate('Create Event Rule'));
+        $this->setTitle($this->translate('New Event Rule'));
 
         $eventRuleForm = (new EventRuleForm())
-            ->setIsNew()
             ->setCsrfCounterMeasureId(Session::getSession()->getId())
             ->setAvailableSourceTypes(
                 Database::get()->fetchCol(
@@ -130,12 +131,24 @@ class EventRulesController extends CompatController
                 )
             )
             ->setAction(Url::fromRequest()->getAbsoluteUrl())
-            ->on(Form::ON_SUBMIT, function ($form) {
+            ->on(Form::ON_SUBMIT, function (EventRuleForm $form) {
+                $rule = $form->getRule();
+
+                $ruleId = Database::get()->transaction(
+                    fn(Connection $db) => (new RuleRepository($db))->create($rule)
+                );
+
+                Notification::success(sprintf(
+                    $this->translate('Created event rule "%s"'),
+                    $rule->name
+                ));
+
+                $this->sendExtraUpdates(['#col1']);
                 $this->getResponse()->setHeader('X-Icinga-Container', 'col2');
-                $this->redirectNow(Links::eventRule(-1)->addParams([
-                    'name' => $form->getValue('name'),
-                    'source_type' => $form->getValue('source_type')
-                ]));
+                $this->redirectNow(Links::eventRule($ruleId));
+            })->on(Form::ON_ERROR, function ($_, EventRuleForm $form) {
+                // TODO: I feel this should be part of CompatForm or CompatController (e.g. $this->sendForm())
+                $this->addPart($form, $this->content->getAttribute('id')->getValue());
             })->handleRequest($this->getServerRequest());
 
         $this->addContent($eventRuleForm);

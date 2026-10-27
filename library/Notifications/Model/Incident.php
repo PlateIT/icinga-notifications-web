@@ -29,6 +29,8 @@ use ipl\Sql\Select;
  * @property Severity $severity
  * @property ?string $mute_reason
  * @property ?string $message
+ * @property string $summary
+ * @property int $source_id
  *
  * @property Query<Objects>|Objects $object
  * @property Query<Contact>|Collection<Contact> $contact
@@ -36,7 +38,8 @@ use ipl\Sql\Select;
  * @property Query<IncidentHistory>|Collection<IncidentHistory> $incident_history
  * @property Query<NotificationHistory>|Collection<NotificationHistory> $notification_history
  * @property Query<Rule>|Collection<Rule> $rule
- * @property Query<RuleEscalation>|Collection<RuleEscalation> $rule_escalation
+ * @property Query<RuleEntry>|Collection<RuleEntry> $rule_entry
+ * @property Query<Source>|Source $source
  */
 class Incident extends Model
 {
@@ -58,7 +61,9 @@ class Incident extends Model
             'recovered_at',
             'severity',
             'mute_reason',
-            'message'
+            'message',
+            'summary',
+            'source_id'
         ];
     }
 
@@ -70,7 +75,9 @@ class Incident extends Model
             'recovered_at' => t('Recovered At'),
             'severity'     => t('Severity'),
             'mute_reason'  => t('Mute Reason'),
-            'message'      => t('Message')
+            'message'      => t('Message'),
+            'summary'      => t('Summary'),
+            'source_id'    => t('Source ID'),
         ];
     }
 
@@ -127,9 +134,6 @@ class Incident extends Model
             ->through('incident_rule')
             ->setJoinType('LEFT');
 
-        $relations
-            ->belongsToMany('rule_escalation', RuleEscalation::class)
-            ->through('incident_rule_escalation_state')
-            ->setJoinType('LEFT');
+        $relations->belongsTo('source', Source::class);
     }
 }

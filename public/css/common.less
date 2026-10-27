@@ -11,8 +11,7 @@
     height: 8em; //TODO(sd): add dynamic fix
   }
 
-  &.event-rule-detail {
-    display: block;
+  &:has(.event-rule-controls) {
     .box-shadow(0, 0, 0, 1px, @gray-lighter);
   }
 }
@@ -24,7 +23,7 @@
   margin-right: 0.2em;
 
   i.icon {
-    vertical-align: text-top;
+    font-size: 1.25em;
   }
 
   i.icon:before {
@@ -61,7 +60,11 @@
   text-transform: uppercase;
 }
 
-.severity-crit {
+.icon.error {
+  color: @state-critical;
+}
+
+.severity-critical {
   color: @state-critical;
 }
 
@@ -69,7 +72,7 @@
   color: @state-ok;
 }
 
-.severity-err {
+.severity-error {
   color: @state-unknown;
 }
 

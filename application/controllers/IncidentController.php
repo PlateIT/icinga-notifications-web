@@ -10,6 +10,7 @@ use ipl\Web\Compat\SearchControls;
 use Icinga\Module\Notifications\Common\Auth;
 use Icinga\Module\Notifications\Common\Database;
 use Icinga\Module\Notifications\Common\Links;
+use Icinga\Module\Notifications\Common\JobTracker;
 use Icinga\Module\Notifications\Model\Contact;
 use Icinga\Module\Notifications\Model\Incident;
 use Icinga\Module\Notifications\Model\NotificationHistory;
@@ -37,6 +38,13 @@ class IncidentController extends CompatController
     use SearchControls;
     use Controls;
 
+    public function init()
+    {
+        $this->assertPermission('notifications/view/incidents');
+
+        parent::init();
+    }
+
     public function indexAction(): void
     {
         $this->setTitle(t('Incident'));
@@ -46,7 +54,7 @@ class IncidentController extends CompatController
 
         $query = Incident::on(Database::get())
             ->with('object')
-            ->withColumns(['object.id_tags', 'object.sources'])
+            ->withColumns(['object.id_tags', 'object.sources', 'source.type'])
             ->filter(Filter::equal('incident.id', $id));
 
         $this->applyRestrictions($query);
@@ -61,20 +69,22 @@ class IncidentController extends CompatController
 
         $this->controls->addAttributes(Attributes::create(['class' => 'incident-detail']));
 
-        /** @var ?Contact $contact */
-        $contact = Contact::on(Database::get())
-            ->columns('id')
-            ->filter(Filter::equal('username', $this->Auth()->getUser()->getUsername()))
-            ->first();
+        if ($incident->recovered_at === null) {
+            /** @var ?Contact $contact */
+            $contact = Contact::on(Database::get())
+                ->columns('id')
+                ->filter(Filter::equal('username', $this->Auth()->getUser()->getUsername()))
+                ->first();
 
-        if ($contact !== null) {
-            $this->addControl(
-                (new IncidentQuickActions($incident, $contact->id))
-                    ->on(Form::ON_SUBMIT, function () use ($incident) {
-                        $this->redirectNow(Links::incident($incident->id));
-                    })
-                    ->handleRequest($this->getServerRequest())
-            );
+            if ($contact !== null) {
+                $this->addControl(
+                    (new IncidentQuickActions($incident, JobTracker::instance()))
+                        ->on(Form::ON_SUBMIT, function () use ($incident) {
+                            $this->redirectNow(Links::incident($incident->id));
+                        })
+                        ->handleRequest($this->getServerRequest())
+                );
+            }
         }
 
         $this->addContent(new IncidentDetail($incident));
@@ -82,11 +92,14 @@ class IncidentController extends CompatController
 
     public function notificationHistoryAction(): void
     {
+        $this->assertPermission('notifications/view/history');
+
         $this->setTitle(t('Notification History'));
         $this->setTitleTab($this->getRequest()->getActionName());
 
         $notificationHistory = NotificationHistory::on(Database::get())
-            ->with(['channel', 'contact', 'contactgroup', 'schedule'])
+            ->with(['contact', 'contactgroup', 'schedule'])
+            ->withColumns(['channel_label' => 'channel.available_channel_type.name'])
             ->filter(Filter::equal('notification_history.incident_id', $this->params->shiftRequired('id')));
         $this->applyRestrictions($notificationHistory);
 
@@ -187,15 +200,20 @@ class IncidentController extends CompatController
     protected function setTitleTab(string $name): void
     {
         $id = $this->params->getRequired('id');
-        $this->getTabs()
-            ->add('index', [
-                'label'  => $this->translate('Incident'),
-                'url'    => Links::incident($id)
-            ])
-            ->add('notification-history', [
+
+        $tabs = $this->getTabs();
+        $tabs->add('index', [
+            'label'  => $this->translate('Incident'),
+            'url'    => Links::incident($id)
+        ]);
+
+        if ($this->hasPermission('notifications/view/history')) {
+            $tabs->add('notification-history', [
                 'label'  => $this->translate('Notification History'),
                 'url'    => Url::fromPath('notifications/incident/notification-history', ['id' => $id])
-            ])
-            ->activate($name);
+            ]);
+        }
+
+        $tabs->activate($name);
     }
 }
