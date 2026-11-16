@@ -23,6 +23,7 @@ use ipl\Orm\Relations;
  * @property Source[] $sources
  *
  * @property Query<Incident>|Collection<Incident> $incident
+ * @property Query<NotificationHistory>|Collection<NotificationHistory> $notification_history
  * @property Query<ObjectIdTag>|Collection<ObjectIdTag> $object_id_tag
  * @property Query<Tag>|Collection<Tag> $tag
  * @property Query<Source>|Collection<Source> $source
@@ -74,6 +75,9 @@ class Objects extends Model
     public function createRelations(Relations $relations): void
     {
         $relations->hasMany('incident', Incident::class)
+            ->setJoinType('LEFT');
+
+        $relations->hasMany('notification_history', NotificationHistory::class)
             ->setJoinType('LEFT');
 
         $relations->hasMany('object_id_tag', ObjectIdTag::class);
